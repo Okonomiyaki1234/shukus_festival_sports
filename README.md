@@ -1,36 +1,79 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-## Getting Started
+# 体育祭プロジェクター連携アプリ（設計案）
 
-First, run the development server:
+## 概要
+特定の学校の体育祭で利用する、プロジェクター表示・リアルタイム演出・得点管理アプリです。
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- **親画面**：操作パネル。スライド進行・演出・得点操作を行う。
+- **子画面**：プロジェクター投影用。親画面の操作に応じてスライドや演出がリアルタイム反映。
+- **得点画面**：得点入力・管理用。各チームの得点を一括加算/減算、非表示切替、得点順表示。
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Supabaseを利用し、リアルタイム同期・ストレージ連携を実現。認証は簡易パスワードのみ。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 画面構成
 
-## Learn More
+### 1. 親画面
+- スライド進行（進む/戻る）
+- 次／前のスライドプレビューもする
+- スライド画像はSupabase Storageから取得
+- 演出（例：フェード、フラッシュ、BGM再生など）
+- 得点操作（加算/減算/非表示切替）
+- 子画面・得点画面へリアルタイムで状態をブロードキャスト
 
-To learn more about Next.js, take a look at the following resources:
+### 2. 子画面
+- 現在のスライド画像を表示
+- 親画面の演出指示をリアルタイム反映
+- 得点表示（順位順に並び替え）
+- 得点非表示時は得点部分を隠す
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 3. 得点画面
+- 各チームの得点を入力
+- 一括加算/減算ボタン
+- 得点非表示切替
+- 得点データはSupabase経由で全画面に反映
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+---
 
-## Deploy on Vercel
+## 技術構成
+- Next.js（App Router）
+- Supabase（Storage, Realtime, Database）
+- Framer Motion（演出用）
+- 認証は簡易パスワードのみ（Supabase Authは未使用）
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+---
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## データ設計（例）
+
+### スライド
+- Storage: `slides/` フォルダに画像を格納
+- DB: `slides` テーブル（id, filename, order など）
+
+### 得点
+- DB: `scores` テーブル（team_id, team_name, score, visible など）
+
+### 状態同期
+- Realtime: `slide_state` チャンネル（現在のスライド番号、演出状態など）
+- Realtime: `score_state` チャンネル（得点・表示状態）
+
+---
+
+## 今後の実装方針
+1. Supabaseストレージ・DB・Realtimeのセットアップ
+2. 画面ごとのUI/UX設計
+3. 親画面の操作→子画面・得点画面へのリアルタイム反映
+4. 得点管理・表示の実装
+5. 各種演出の追加
+
+---
+
+## 備考
+- 認証は現状のガバガバパスワード方式を維持
+- Supabase Authは使わない
+- スライド画像や得点データはSupabaseで一元管理
+- 画面遷移や演出はFramer Motion等で実装予定
+
+---
+
+このREADMEは設計のたたき台です。ご要望に応じて随時アップデートします。
