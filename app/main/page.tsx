@@ -107,6 +107,30 @@ export default function MainPage() {
 
   const handleScoreVisible = () => setScoreVisible((v) => !v);
 
+  // 重ねレイヤー演出リスト
+  const overlayEffects = [
+    { type: "fever", label: "フィーバー演出" },
+    { type: "warning", label: "警告" },
+    { type: "sakura", label: "桜吹雪" },
+    { type: "fuurin", label: "短冊付き風鈴" },
+    { type: "koyo", label: "紅葉の風" },
+    { type: "snow", label: "雪の結晶" },
+    { type: "hanabi", label: "花火" },
+    { type: "kirakira", label: "キラキラ" },
+    { type: "bakuhatsu", label: "爆発" },
+    { type: "confetti", label: "紙吹雪" },
+    { type: "star", label: "スター" },
+    { type: "rainbow", label: "虹" },
+    { type: "lightning", label: "雷" },
+    { type: "heart", label: "ハート" },
+    { type: "clap", label: "拍手" },
+  ];
+
+  // 重ね演出リクエスト
+  const handleOverlayEffect = async (type: string) => {
+    await supabase.from("overlay_effects").insert({ effect_type: type });
+  };
+
   return (
     <div className="min-h-screen bg-green-50 dark:bg-zinc-900 p-8 flex flex-col items-center">
       <h1 className="text-2xl font-bold mb-6">親画面（操作パネル）</h1>
@@ -125,6 +149,18 @@ export default function MainPage() {
         >
           スライド設定ページへ
         </a>
+      </div>
+      {/* 重ねレイヤー演出ボタン群 */}
+      <div className="mb-8 flex flex-wrap gap-3 w-full max-w-2xl">
+        {overlayEffects.map(e => (
+          <button
+            key={e.type}
+            onClick={() => handleOverlayEffect(e.type)}
+            className="px-4 py-2 bg-pink-600 text-white rounded shadow hover:bg-pink-700 transition text-sm"
+          >
+            {e.label}
+          </button>
+        ))}
       </div>
       {/* スライド操作 */}
       <div className="flex gap-8 items-center mb-8">

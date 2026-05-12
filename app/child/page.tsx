@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "../lib/supabaseClient";
 
 
@@ -10,7 +11,30 @@ export default function ChildPage() {
   const [currentSlideId, setCurrentSlideId] = useState<string | null>(null);
   const [scoreVisible, setScoreVisible] = useState(true);
   const [effect, setEffect] = useState("none");
+  const [slideEffect, setSlideEffect] = useState("none"); // スライド切り替え時のみ発動用
+  const prevSlideId = useRef<string | null>(null);
   const subscriptionRef = useRef<any>(null);
+  const [overlay, setOverlay] = useState<{ id: string, type: string } | null>(null);
+  const overlayTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // 重ねレイヤー演出リスト
+  const overlayEffectsList = [
+    { type: "fever", label: "フィーバー演出" },
+    { type: "warning", label: "警告" },
+    { type: "sakura", label: "桜吹雪" },
+    { type: "fuurin", label: "短冊付き風鈴" },
+    { type: "koyo", label: "紅葉の風" },
+    { type: "snow", label: "雪の結晶" },
+    { type: "hanabi", label: "花火" },
+    { type: "kirakira", label: "キラキラ" },
+    { type: "bakuhatsu", label: "爆発" },
+    { type: "confetti", label: "紙吹雪" },
+    { type: "star", label: "スター" },
+    { type: "rainbow", label: "虹" },
+    { type: "lightning", label: "雷" },
+    { type: "heart", label: "ハート" },
+    { type: "clap", label: "拍手" },
+  ];
 
   // データ取得関数
   const fetchAll = async () => {
@@ -23,8 +47,16 @@ export default function ChildPage() {
     // スライド状態取得
     const { data: slideState } = await supabase.from("slide_state").select().eq("id", 1).single();
     if (slideState) {
-      setCurrentSlideId(slideState.current_slide);
-      setEffect(slideState.effect ?? "none");
+      setEffect(slideState.effect ?? "none"); // 現在のeffect値は保持
+      // スライドIDが変わった時だけeffectを発動
+      if (slideState.current_slide !== prevSlideId.current) {
+        setSlideEffect(slideState.effect ?? "none");
+        setCurrentSlideId(slideState.current_slide);
+        prevSlideId.current = slideState.current_slide;
+      } else {
+        setCurrentSlideId(slideState.current_slide);
+        setSlideEffect("none"); // effect切替時は発動しない
+      }
     }
     // 得点表示状態取得
     const { data: scoreState } = await supabase.from("score_state").select().eq("id", 1).single();
@@ -40,6 +72,19 @@ export default function ChildPage() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'slide_state' }, fetchAll)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'score_state' }, fetchAll)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'scores' }, fetchAll)
+      // overlay_effectsテーブルの新規insertのみ購読
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'overlay_effects' }, async (payload) => {
+        const effect = payload.new;
+        if (!effect.consumed) {
+          setOverlay({ id: effect.id, type: effect.effect_type });
+          // 3秒後に消す＋consumed=trueにupdate
+          if (overlayTimeoutRef.current) clearTimeout(overlayTimeoutRef.current);
+          overlayTimeoutRef.current = setTimeout(async () => {
+            setOverlay(null);
+            await supabase.from("overlay_effects").update({ consumed: true }).eq("id", effect.id);
+          }, 3000);
+        }
+      })
       .subscribe();
     subscriptionRef.current = channel;
 
@@ -47,6 +92,7 @@ export default function ChildPage() {
       if (subscriptionRef.current) {
         supabase.removeChannel(subscriptionRef.current);
       }
+      if (overlayTimeoutRef.current) clearTimeout(overlayTimeoutRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -66,19 +112,82 @@ export default function ChildPage() {
   };
   const currentSlide = slides.find((s) => s.id === currentSlideId);
 
+  // スライド切り替え時のみeffectを発動
+  const getSlideMotion = () => {
+    switch (slideEffect) {
+      case "fade":
+        return {
+          initial: { opacity: 0 },
+          animate: { opacity: 1 },
+          exit: { opacity: 0 },
+          transition: { duration: 0.6 }
+        };
+      case "slide-right":
+        return {
+          initial: { x: 200, opacity: 0 },
+          animate: { x: 0, opacity: 1 },
+          exit: { x: -200, opacity: 0 },
+          transition: { duration: 0.5 }
+        };
+      case "slide-bottom":
+        return {
+          initial: { y: 200, opacity: 0 },
+          animate: { y: 0, opacity: 1 },
+          exit: { y: -200, opacity: 0 },
+          transition: { duration: 0.5 }
+        };
+      case "flash":
+        return {
+          initial: { opacity: 0 },
+          animate: { opacity: [0, 1, 0.2, 1] },
+          exit: { opacity: 0 },
+          transition: { duration: 0.7 }
+        };
+      default:
+        return {
+          initial: { opacity: 1 },
+          animate: { opacity: 1 },
+          exit: { opacity: 0 },
+          transition: { duration: 0.2 }
+        };
+    }
+  };
+
   return (
     <div className="min-h-screen bg-black flex flex-col items-center justify-center relative">
-      {/* スライド画像 */}
-      <div className="w-[640px] h-[360px] bg-zinc-800 flex items-center justify-center text-white text-2xl font-bold mb-8">
-        {currentSlide ? (
-          <img
-            src={getImageUrl(currentSlide.filename)}
-            alt={currentSlide.filename}
-            className="w-full h-full object-contain"
-          />
-        ) : (
-          <span>スライドなし</span>
-        )}
+      {/* スライド画像（アニメーション付き） */}
+      <div className="w-[640px] h-[360px] bg-zinc-800 flex items-center justify-center text-white text-2xl font-bold mb-8 overflow-hidden relative">
+        <AnimatePresence mode="wait">
+          {currentSlide ? (
+            <motion.img
+              key={currentSlide.id}
+              src={getImageUrl(currentSlide.filename)}
+              alt={currentSlide.filename}
+              className="w-full h-full object-contain"
+              {...getSlideMotion()}
+            />
+          ) : (
+            <motion.span key="none" {...getSlideMotion()}>スライドなし</motion.span>
+          )}
+        </AnimatePresence>
+        {/* 重ねレイヤー演出 */}
+        <AnimatePresence>
+          {overlay && (
+            <motion.div
+              key={overlay.id}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.5 }}
+              className="absolute inset-0 pointer-events-none flex items-center justify-center z-20"
+            >
+              {/* 演出ごとに切り替え（ここは後で個別演出を追加） */}
+              <span className="text-5xl font-bold text-white drop-shadow-lg bg-black/40 rounded px-8 py-4 animate-pulse">
+                {overlayEffectsList.find(e => e.type === overlay.type)?.label || overlay.type}
+              </span>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
       {/* 得点表示（順位順） */}
       {scoreVisible && (
