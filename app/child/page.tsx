@@ -64,37 +64,66 @@ export default function ChildPage() {
   };
 
   // 初回取得＋Realtime購読
+  // スライド・得点同期用購読
   useEffect(() => {
     fetchAll();
-
-    // Realtime購読
     const channel = supabase.channel('child-sync')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'slide_state' }, fetchAll)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'score_state' }, fetchAll)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'scores' }, fetchAll)
-      // overlay_effectsテーブルの新規insertのみ購読
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'overlay_effects' }, async (payload) => {
-        const effect = payload.new;
-        if (!effect.consumed) {
+      .subscribe();
+    subscriptionRef.current = channel;
+    return () => {
+      if (subscriptionRef.current) supabase.removeChannel(subscriptionRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // overlay_effects: id='singleton-overlay'のみ監視・発動
+  useEffect(() => {
+    let lastEffectType: string | null = null;
+    let lastConsumed: boolean | null = null;
+    const overlayChannel = supabase.channel('overlay-sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'overlay_effects', filter: 'id=eq.singleton-overlay' }, async (payload) => {
+        const effect = payload.new as { [key: string]: any };
+        if (!effect) return;
+        // consumed=false かつ effect_typeが変化した時のみ発動
+        if (effect.id === 'singleton-overlay' && effect.consumed === false && (effect.effect_type !== lastEffectType || lastConsumed !== false)) {
           setOverlay({ id: effect.id, type: effect.effect_type });
-          // 3秒後に消す＋consumed=trueにupdate
+          lastEffectType = effect.effect_type;
+          lastConsumed = false;
           if (overlayTimeoutRef.current) clearTimeout(overlayTimeoutRef.current);
           overlayTimeoutRef.current = setTimeout(async () => {
             setOverlay(null);
-            await supabase.from("overlay_effects").update({ consumed: true }).eq("id", effect.id);
+            try {
+              const { error } = await supabase.from("overlay_effects").update({ consumed: true }).eq("id", effect.id);
+              if (error) {
+                console.error('[overlay_effects] consumed update error:', error);
+              }
+            } catch (err) {
+              console.error('[overlay_effects] consumed update exception:', err);
+            }
           }, 3000);
+        }
+        // consumed=trueになったらoverlayを消す（多重発動防止）
+        if (effect.id === 'singleton-overlay' && effect.consumed === true && lastConsumed !== true) {
+          setOverlay(null);
+          lastConsumed = true;
         }
       })
       .subscribe();
-    subscriptionRef.current = channel;
-
-    return () => {
-      if (subscriptionRef.current) {
-        supabase.removeChannel(subscriptionRef.current);
+    // 初回マウント時に現在の状態を取得してlastEffectType/lastConsumedを初期化
+    (async () => {
+      const { data } = await supabase.from('overlay_effects').select().eq('id', 'singleton-overlay').single();
+      if (data) {
+        lastEffectType = data.effect_type;
+        lastConsumed = data.consumed;
       }
+    })();
+    return () => {
+      supabase.removeChannel(overlayChannel);
       if (overlayTimeoutRef.current) clearTimeout(overlayTimeoutRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 得点を降順でソート
@@ -170,24 +199,7 @@ export default function ChildPage() {
             <motion.span key="none" {...getSlideMotion()}>スライドなし</motion.span>
           )}
         </AnimatePresence>
-        {/* 重ねレイヤー演出 */}
-        <AnimatePresence>
-          {overlay && (
-            <motion.div
-              key={overlay.id}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.5 }}
-              className="absolute inset-0 pointer-events-none flex items-center justify-center z-20"
-            >
-              {/* 演出ごとに切り替え（ここは後で個別演出を追加） */}
-              <span className="text-5xl font-bold text-white drop-shadow-lg bg-black/40 rounded px-8 py-4 animate-pulse">
-                {overlayEffectsList.find(e => e.type === overlay.type)?.label || overlay.type}
-              </span>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* オーバーレイ演出は一旦非表示・削除 */}
       </div>
       {/* 得点表示（順位順） */}
       {scoreVisible && (

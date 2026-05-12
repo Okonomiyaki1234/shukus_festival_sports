@@ -107,7 +107,8 @@ export default function MainPage() {
 
   const handleScoreVisible = () => setScoreVisible((v) => !v);
 
-  // 重ねレイヤー演出リスト
+
+  // 新方式: 重ねレイヤー演出リスト
   const overlayEffects = [
     { type: "fever", label: "フィーバー演出" },
     { type: "warning", label: "警告" },
@@ -126,9 +127,25 @@ export default function MainPage() {
     { type: "clap", label: "拍手" },
   ];
 
-  // 重ね演出リクエスト
-  const handleOverlayEffect = async (type: string) => {
-    await supabase.from("overlay_effects").insert({ effect_type: type });
+  // 選択中のoverlay effect
+  const [selectedOverlay, setSelectedOverlay] = useState<string | null>(null);
+  const [isFiring, setIsFiring] = useState(false);
+
+  // 発動ボタン押下時: id='singleton-overlay'でUPSERT
+  const handleOverlayFire = async () => {
+    if (!selectedOverlay) return;
+    setIsFiring(true);
+    // id固定値でUPSERT（なければINSERT, あればUPDATE）
+    const id = 'singleton-overlay';
+    const { error } = await supabase.from("overlay_effects").upsert([
+      {
+        id,
+        effect_type: selectedOverlay,
+        consumed: false,
+        requested_at: new Date().toISOString(),
+      }
+    ], { onConflict: 'id' });
+    setIsFiring(false);
   };
 
   return (
@@ -150,17 +167,26 @@ export default function MainPage() {
           スライド設定ページへ
         </a>
       </div>
-      {/* 重ねレイヤー演出ボタン群 */}
-      <div className="mb-8 flex flex-wrap gap-3 w-full max-w-2xl">
-        {overlayEffects.map(e => (
-          <button
-            key={e.type}
-            onClick={() => handleOverlayEffect(e.type)}
-            className="px-4 py-2 bg-pink-600 text-white rounded shadow hover:bg-pink-700 transition text-sm"
-          >
-            {e.label}
-          </button>
-        ))}
+      {/* 重ねレイヤー演出 選択→発動方式 */}
+      <div className="mb-8 flex flex-col gap-3 w-full max-w-2xl">
+        <div className="flex flex-wrap gap-3">
+          {overlayEffects.map(e => (
+            <button
+              key={e.type}
+              onClick={() => setSelectedOverlay(e.type)}
+              className={`px-4 py-2 rounded shadow text-sm transition ${selectedOverlay === e.type ? 'bg-pink-700 text-white font-bold scale-105' : 'bg-pink-200 text-pink-900 hover:bg-pink-400'}`}
+            >
+              {e.label}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={handleOverlayFire}
+          className={`mt-2 px-6 py-2 rounded font-bold shadow transition ${selectedOverlay ? 'bg-pink-600 text-white hover:bg-pink-700' : 'bg-zinc-300 text-zinc-500 cursor-not-allowed'}`}
+          disabled={!selectedOverlay || isFiring}
+        >
+          {isFiring ? '発動中...' : '発動'}
+        </button>
       </div>
       {/* スライド操作 */}
       <div className="flex gap-8 items-center mb-8">
