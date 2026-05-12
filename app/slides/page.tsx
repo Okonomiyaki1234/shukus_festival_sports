@@ -81,7 +81,7 @@ export default function SlidesSettingPage() {
     setLoading(false);
   };
 
-  // 順番入れ替え（上/下）
+  // 順番入れ替え（上/下）: 隣のスライドとorder値を単純にswap
   const handleMove = async (idx: number, direction: "up" | "down") => {
     if ((direction === "up" && idx === 0) || (direction === "down" && idx === slides.length - 1)) return;
     setLoading(true);
@@ -89,9 +89,10 @@ export default function SlidesSettingPage() {
     const swapIdx = direction === "up" ? idx - 1 : idx + 1;
     const slideA = slides[idx];
     const slideB = slides[swapIdx];
-    // order値を入れ替え
+    // order値を単純にswap（欠番や重複があっても隣同士で入れ替え）
+    const tempOrder = slideA.order;
     await supabase.from("slides").update({ "order": slideB.order }).eq("id", slideA.id);
-    await supabase.from("slides").update({ "order": slideA.order }).eq("id", slideB.id);
+    await supabase.from("slides").update({ "order": tempOrder }).eq("id", slideB.id);
     await fetchSlides();
     setLoading(false);
   };
@@ -120,25 +121,30 @@ export default function SlidesSettingPage() {
       </div>
       {/* 画像選択＋追加 */}
       <form onSubmit={handleAdd} className="flex gap-4 mb-8 items-center">
-        <select
-          value={selectedImage}
-          onChange={e => setSelectedImage(e.target.value)}
-          className="border rounded px-3 py-2 min-w-[180px]"
-          required
-        >
-          <option value="">画像を選択</option>
-          {uploadedImages.map((img) => (
-            <option key={img} value={img}>{img}</option>
-          ))}
-        </select>
-        {/* 選択画像プレビュー */}
-        {selectedImage && (
-          <img
-            src={getImageUrl(selectedImage)}
-            alt="preview"
-            className="w-24 h-16 object-contain border bg-white"
-          />
-        )}
+        <div className="relative">
+          <select
+            value={selectedImage}
+            onChange={e => setSelectedImage(e.target.value)}
+            className="border rounded px-3 py-2 min-w-[180px]"
+            required
+          >
+            <option value="">画像を選択</option>
+            {uploadedImages.map((img) => (
+              <option key={img} value={img}>{img}</option>
+            ))}
+          </select>
+          {/* 選択中の画像をoptionの下にプレビュー表示 */}
+          {selectedImage && (
+            <div className="absolute left-0 top-full mt-1 bg-white border rounded shadow p-2 z-10 flex items-center">
+              <img
+                src={getImageUrl(selectedImage)}
+                alt="preview"
+                className="w-32 h-20 object-contain border bg-white"
+              />
+              <span className="ml-2 text-xs text-zinc-700">{selectedImage}</span>
+            </div>
+          )}
+        </div>
         <input
           type="number"
           value={order}

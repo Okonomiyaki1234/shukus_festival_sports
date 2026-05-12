@@ -87,11 +87,9 @@ export default function ChildPage() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'overlay_effects', filter: 'id=eq.singleton-overlay' }, async (payload) => {
         const effect = payload.new as { [key: string]: any };
         if (!effect) return;
-        // consumed=false かつ effect_typeが変化した時のみ発動
-        if (effect.id === 'singleton-overlay' && effect.consumed === false && (effect.effect_type !== lastEffectType || lastConsumed !== false)) {
+        // consumed=falseなら必ず発動
+        if (effect.id === 'singleton-overlay' && effect.consumed === false) {
           setOverlay({ id: effect.id, type: effect.effect_type });
-          lastEffectType = effect.effect_type;
-          lastConsumed = false;
           if (overlayTimeoutRef.current) clearTimeout(overlayTimeoutRef.current);
           overlayTimeoutRef.current = setTimeout(async () => {
             setOverlay(null);
@@ -106,9 +104,8 @@ export default function ChildPage() {
           }, 3000);
         }
         // consumed=trueになったらoverlayを消す（多重発動防止）
-        if (effect.id === 'singleton-overlay' && effect.consumed === true && lastConsumed !== true) {
+        if (effect.id === 'singleton-overlay' && effect.consumed === true) {
           setOverlay(null);
-          lastConsumed = true;
         }
       })
       .subscribe();
