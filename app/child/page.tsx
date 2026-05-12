@@ -99,9 +99,8 @@ export default function ChildPage() {
             console.error('[overlay_effects] consumed update exception:', err);
           }
         }, 3000);
-      } else {
-        setOverlay(null);
       }
+      // consumed=trueのときはsetOverlay(null)を呼ばず何もしない（消しすぎ防止）
     };
 
     // サブスクライブでイベントが来たら必ず最新値をselectして判定
@@ -191,7 +190,23 @@ export default function ChildPage() {
             <motion.span key="none" {...getSlideMotion()}>スライドなし</motion.span>
           )}
         </AnimatePresence>
-        {/* オーバーレイ演出は一旦非表示・削除 */}
+        {/* オーバーレイ演出レイヤー（z-50で最前面に） */}
+        <AnimatePresence>
+          {overlay && (
+            <motion.div
+              key={overlay.id + overlay.type}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.5 }}
+              className="absolute inset-0 pointer-events-none flex items-center justify-center z-50"
+            >
+              <span className="text-5xl font-bold text-white drop-shadow-lg bg-black/40 rounded px-8 py-4 animate-pulse">
+                {overlayEffectsList.find(e => e.type === overlay.type)?.label || overlay.type}
+              </span>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
       {/* 得点表示（順位順） */}
       {scoreVisible && (
