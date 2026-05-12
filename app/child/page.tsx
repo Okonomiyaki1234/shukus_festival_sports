@@ -79,44 +79,39 @@ export default function ChildPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // overlay_effects: id='singleton-overlay'のみ監視・発動
+  // overlay_effects: id='singleton-overlay'のみ監視・発動（必ずselectで最新値を取得して判定）
   useEffect(() => {
-    let lastEffectType: string | null = null;
-    let lastConsumed: boolean | null = null;
-    const overlayChannel = supabase.channel('overlay-sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'overlay_effects', filter: 'id=eq.singleton-overlay' }, async (payload) => {
-        const effect = payload.new as { [key: string]: any };
-        if (!effect) return;
-        // consumed=falseなら必ず発動
-        if (effect.id === 'singleton-overlay' && effect.consumed === false) {
-          setOverlay({ id: effect.id, type: effect.effect_type });
-          if (overlayTimeoutRef.current) clearTimeout(overlayTimeoutRef.current);
-          overlayTimeoutRef.current = setTimeout(async () => {
-            setOverlay(null);
-            try {
-              const { error } = await supabase.from("overlay_effects").update({ consumed: true }).eq("id", effect.id);
-              if (error) {
-                console.error('[overlay_effects] consumed update error:', error);
-              }
-            } catch (err) {
-              console.error('[overlay_effects] consumed update exception:', err);
-            }
-          }, 3000);
-        }
-        // consumed=trueになったらoverlayを消す（多重発動防止）
-        if (effect.id === 'singleton-overlay' && effect.consumed === true) {
+    // 発動＆消費処理
+    const checkAndFireOverlay = async () => {
+      const { data, error } = await supabase.from('overlay_effects').select().eq('id', 'singleton-overlay').single();
+      if (error || !data) return;
+      if (data.consumed === false) {
+        setOverlay({ id: data.id, type: data.effect_type });
+        if (overlayTimeoutRef.current) clearTimeout(overlayTimeoutRef.current);
+        overlayTimeoutRef.current = setTimeout(async () => {
           setOverlay(null);
-        }
-      })
-      .subscribe();
-    // 初回マウント時に現在の状態を取得してlastEffectType/lastConsumedを初期化
-    (async () => {
-      const { data } = await supabase.from('overlay_effects').select().eq('id', 'singleton-overlay').single();
-      if (data) {
-        lastEffectType = data.effect_type;
-        lastConsumed = data.consumed;
+          try {
+            const { error } = await supabase.from("overlay_effects").update({ consumed: true }).eq("id", data.id);
+            if (error) {
+              console.error('[overlay_effects] consumed update error:', error);
+            }
+          } catch (err) {
+            console.error('[overlay_effects] consumed update exception:', err);
+          }
+        }, 3000);
+      } else {
+        setOverlay(null);
       }
-    })();
+    };
+
+    // サブスクライブでイベントが来たら必ず最新値をselectして判定
+    const overlayChannel = supabase.channel('overlay-sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'overlay_effects', filter: 'id=eq.singleton-overlay' }, checkAndFireOverlay)
+      .subscribe();
+
+    // 初回マウント時にも必ず判定
+    checkAndFireOverlay();
+
     return () => {
       supabase.removeChannel(overlayChannel);
       if (overlayTimeoutRef.current) clearTimeout(overlayTimeoutRef.current);
