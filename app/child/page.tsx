@@ -117,12 +117,19 @@ export default function ChildPage() {
     };
   }, []);
 
-  // 得点を降順でソート
-  const sortedTeams = [...teams].sort((a, b) => {
-    const sa = scores.find((s: any) => s.team_id === a.id)?.score ?? 0;
-    const sb = scores.find((s: any) => s.team_id === b.id)?.score ?? 0;
-    return sb - sa;
-  });
+  // 得点表示用の並び順を決定
+  let sortedTeams: any[] = [];
+  if (scoreVisible) {
+    // 得点降順
+    sortedTeams = [...teams].sort((a, b) => {
+      const sa = scores.find((s: any) => s.team_id === a.id)?.score ?? 0;
+      const sb = scores.find((s: any) => s.team_id === b.id)?.score ?? 0;
+      return sb - sa;
+    });
+  } else {
+    // id昇順
+    sortedTeams = [...teams].sort((a, b) => a.id - b.id);
+  }
 
   // 現在スライドの画像URL取得
   const getImageUrl = (filename: string) => {
@@ -174,9 +181,9 @@ export default function ChildPage() {
   };
 
   return (
-    <div className="min-h-screen bg-black flex flex-col items-center justify-center relative">
-      {/* スライド画像（アニメーション付き） */}
-      <div className="w-[640px] h-[360px] bg-zinc-800 flex items-center justify-center text-white text-2xl font-bold mb-8 overflow-hidden relative">
+    <div className="fixed inset-0 min-h-screen min-w-screen bg-black flex flex-col items-center justify-center relative">
+      {/* スライド画像（アニメーション付き） 全画面 */}
+      <div className="fixed inset-0 w-full h-full bg-zinc-800 flex items-center justify-center text-white text-2xl font-bold overflow-hidden z-0">
         <AnimatePresence mode="wait">
           {currentSlide ? (
             <motion.img
@@ -184,6 +191,7 @@ export default function ChildPage() {
               src={getImageUrl(currentSlide.filename)}
               alt={currentSlide.filename}
               className="w-full h-full object-contain"
+              style={{ maxWidth: '100vw', maxHeight: '100vh' }}
               {...getSlideMotion()}
             />
           ) : (
@@ -208,20 +216,24 @@ export default function ChildPage() {
           )}
         </AnimatePresence>
       </div>
-      {/* 得点表示（順位順） */}
-      {scoreVisible && (
-        <div className="absolute bottom-12 left-1/2 -translate-x-1/2 bg-white/90 rounded shadow px-8 py-4 flex gap-8">
-          {sortedTeams.map((team) => {
-            const score = scores.find((s) => s.team_id === team.id)?.score ?? 0;
-            return (
-              <div key={team.id} className="flex flex-col items-center" style={{ color: team.color }}>
-                <span className="font-bold text-lg">{team.name}</span>
-                <span className="text-2xl font-mono">{score}</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      {/* 得点表示（順位順またはid順） 右寄せ＆幅狭め */}
+      <div className="absolute bottom-12 right-8 flex flex-col gap-2 w-[200px] items-end">
+        {sortedTeams.map((team) => {
+          const score = scores.find((s) => s.team_id === team.id)?.score ?? 0;
+          // 表示上の得点
+          const displayScore = scoreVisible ? score : "???";
+          return (
+            <div
+              key={team.id}
+              className="bg-white/90 rounded shadow px-4 py-2 flex items-center justify-between text-base font-bold w-full"
+              style={{ color: team.color }}
+            >
+              <span>{team.name}：</span>
+              <span className="ml-2 font-mono">{displayScore}点</span>
+            </div>
+          );
+        })}
+      </div>
       {/* 演出（ダミー） */}
       {effect !== "none" && (
         <div className="absolute top-4 right-4 bg-green-600 text-white px-4 py-2 rounded shadow">
